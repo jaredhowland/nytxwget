@@ -1,0 +1,168 @@
+#!/usr/bin/python
+
+import calendar
+import datetime
+import dateutil.parser
+import mechanize
+import os
+import re
+import settings
+import sys
+
+
+browser = mechanize.Browser()
+
+
+def dateSequence(**kwargs):
+    """
+    Return a list of dates starting with the first argument and
+    ending with the second.
+
+    """
+
+    start_date = dateutil.parser.parse(kwargs["start_date"])
+    end_date = dateutil.parser.parse(kwargs["end_date"])
+
+    date = start_date
+    dates = []
+
+    while date <= end_date:
+        dates.append(date)
+        date = date + datetime.timedelta(days=1)
+
+    return dates
+
+
+def getLoginCookie():
+    """
+    Login to the New York Times web site to get a login cookie for use
+    on subsequent requests.
+    """
+
+    browser.open(settings.login_url)
+    browser.select_form(nr=0)
+
+    browser["userid"] = settings.user
+    browser["password"] = settings.password
+
+    return browser.submit()
+
+
+def getPuzzle(**kwargs):
+    """
+    Download the specified date's puzzle in the specified format
+    to the .original/ subdirectory of the puzzle directory.
+    """
+
+    date = kwargs["date"]
+    ptype = kwargs["ptype"]
+
+    remote_dirname = date.strftime("%Y/%m/%d")
+    basename = date.strftime("%b%d%y")
+    date_time_t = calendar.timegm(date.timetuple())
+
+    remote_path = remote_dirname + "/" + basename + "." + ptype
+
+    local_dir = settings.puzzle_dir + "/" + ptype + "/.original"
+    local_path = local_dir + "/" + basename + "." + ptype
+
+    print "%s => %s" % (remote_path, local_path)
+
+    if not os.path.isdir(local_dir):
+        os.makedirs(local_dir)
+
+    if not os.path.isfile(local_path):
+        browser.retrieve(settings.puzzle_url + remote_path,
+                         filename = local_path)
+
+    os.utime(local_path, (date_time_t, date_time_t))
+
+
+def organizePuzzles(**kwargs):
+    """
+    """
+
+    ptype = kwargs["ptype"]
+
+    ptype_dir = settings.puzzle_dir + "/" + ptype
+
+    for subdir in [
+        '0 Sunday',
+        '1 Monday',
+        '2 Tuesday',
+        '3 Wednesday',
+        '4 Thursday', 
+        '5 Friday',
+        '6 Saturday',
+        'Last 14 Days'
+        ]:
+        subdir_path = ptype_dir + "/" + subdir
+        if not os.path.isdir(subdir_path):
+            os.makedirs(subdir_path)
+
+    last14days_re = re.compile("\d{4}-\d{2}-\d{2} \w{3}\.(pdf|puz)")
+
+    for last14days_file in os.listdir(ptype_dir + "/Last 14 Days"):
+        mtime = os.path.getmtime(ptype_dir + "/Last 14 Days/" + last14days_file)
+        if (datetime.datetime.fromtimestamp(mtime)
+            < (datetime.datetime.today() - datetime.timedelta(days=14))
+            and last14days_re.match(last14days_file)):
+            os.remove(ptype_dir + "/Last 14 Days/" + last14days_file)
+
+    original_re = re.compile("(\w{3})(\d{2})(\d{2})\.(pdf|puz)")
+
+    for original_file in os.listdir(ptype_dir + "/.original"):
+        match = original_re.match(original_file)
+
+        if not match:
+            continue
+
+        month = match.group(1)
+        day = match.group(2)
+        year = match.group(3)
+        ptype = match.group(4)
+
+        try:
+            date = dateutil.parser.parse("%s %s, %s" % (month, day, year))
+        except:
+            continue
+
+        date_time_t = int(date.strftime("%s"))
+
+        short_basename = date.strftime("%Y-%m-%d" + "." + ptype)
+        long_basename = date.strftime("%Y-%m-%d %a" + "." + ptype)
+
+        original_dir = ptype_dir + "/.original"
+        original_file = original_dir + "/" + original_file
+
+        dayofweek_dir = ptype_dir + "/" + date.strftime("%w %A")
+        dayofweek_link = dayofweek_dir + "/" + short_basename
+
+        last14days_dir = ptype_dir + "/Last 14 Days"
+        last14days_link = last14days_dir + "/" + long_basename
+
+        if not os.path.isfile(dayofweek_link):
+            os.link(original_file, dayofweek_link)
+
+        if not date < (datetime.datetime.today()
+                       - datetime.timedelta(days=14)):
+            if not os.path.isfile(last14days_link):
+                os.link(original_file, last14days_link)
+
+        os.utime(original_file, (date_time_t, date_time_t))
+
+
+def main(args):
+
+    getLoginCookie()
+
+    for date in dateSequence(start_date=args[0], end_date=args[1]):
+        for ptype in ["pdf", "puz"]:
+            getPuzzle(date=date, ptype=ptype)
+
+    for ptype in ["pdf", "puz"]:
+        organizePuzzles(ptype=ptype)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

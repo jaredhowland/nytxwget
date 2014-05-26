@@ -6,7 +6,7 @@ place your credentials in a file named `settings.py` in the same
 directory, with contents like
 
     login_url  = "https://myaccount.nytimes.com/auth/login"
-    puzzle_url = "http://select.nytimes.com/premium/xword/"
+    puzzle_url = "http://www.nytimes.com/svc/crosswords/v2/puzzle/"
 
     user       = "wshortz@nytimes.com"
     password   = "ILoveTylerHinman"

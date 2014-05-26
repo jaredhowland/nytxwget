@@ -56,12 +56,15 @@ def getPuzzle(**kwargs):
 
     date = kwargs["date"]
     ptype = kwargs["ptype"]
-
-    remote_dirname = date.strftime("%Y/%m/%d")
-    basename = date.strftime("%b%d%y")
     date_time_t = calendar.timegm(date.timetuple())
 
-    remote_path = remote_dirname + "/" + basename + "." + ptype
+    if ptype == 'pdf':
+        basename = date.strftime("%b%d%y")
+        remote_path = "print/" + basename + "." + ptype
+
+    elif ptype == 'puz':
+        basename = date.strftime("daily-%Y-%m-%d")
+        remote_path = basename + "." + ptype
 
     local_dir = settings.puzzle_dir + "/" + ptype + "/.original"
     local_path = local_dir + "/" + basename + "." + ptype
@@ -109,7 +112,10 @@ def organizePuzzles(**kwargs):
             and last14days_re.match(last14days_file)):
             os.remove(ptype_dir + "/Last 14 Days/" + last14days_file)
 
-    original_re = re.compile("(\w{3})(\d{2})(\d{2})\.(pdf|puz)")
+    if ptype == "pdf":
+        original_re = re.compile("(\w{3})(\d{2})(\d{2})\.pdf")
+    elif ptype == "puz":
+        original_re = re.compile("daily-(\d{4})-(\d{2})-(\d{2})\.puz")
 
     for original_file in os.listdir(ptype_dir + "/.original"):
         match = original_re.match(original_file)
@@ -117,15 +123,25 @@ def organizePuzzles(**kwargs):
         if not match:
             continue
 
-        month = match.group(1)
-        day = match.group(2)
-        year = match.group(3)
-        ptype = match.group(4)
+        if ptype == "pdf":
+            month = match.group(1)
+            day = match.group(2)
+            year = match.group(3)
 
-        try:
-            date = dateutil.parser.parse("%s %s, %s" % (month, day, year))
-        except:
-            continue
+            try:
+                date = dateutil.parser.parse("%s %s, %s" % (month, day, year))
+            except:
+                continue
+
+        elif ptype == "puz":
+            year = match.group(1)
+            month = match.group(2)
+            day = match.group(3)
+
+            try:
+                date = dateutil.parser.parse("%s-%s-%s" % (year, month, day))
+            except:
+                continue
 
         date_time_t = int(date.strftime("%s"))
 
